@@ -1,5 +1,7 @@
 import React from 'react';
 import Controls from '../components/Controls';
+import AVSender from '../components/AVSender';
+import AVReceiver from '../components/AVReceiver';
 
 const Home = () => {
   return (
@@ -19,6 +21,11 @@ const Home = () => {
       
       <div className="mt-8 text-center text-sm text-gray-500">
         <p>Ready to stream audio and video across platforms</p>
+      </div>
+      
+      <div className="mt-8 flex flex-col md:flex-row justify-center gap-8">
+        <AVSender />
+        <AVReceiver />
       </div>
     </div>
   );

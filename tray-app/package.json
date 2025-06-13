@@ -1,15 +1,16 @@
 {
   "name": "tray-app",
   "version": "1.0.0",
-  "main": "main.ts",
+  "main": "dist/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "npm run build && electron .",
     "build": "tsc"
   },
   "dependencies": {
     "electron": "^28.1.0"
   },
   "devDependencies": {
+    "ts-node": "^10.9.2",
     "typescript": "^5.4.2"
   }
 }

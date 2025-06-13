@@ -2,10 +2,10 @@
   "name": "sender",
   "version": "1.0.0",
   "description": "Captures local system audio/video and sends via WebRTC",
-  "main": "sender.ts",
+  "main": "dist/sender.js",
   "type": "module",
   "scripts": {
-    "start": "ts-node --esm sender.ts",
+    "start": "npm run build && node dist/sender.js",
     "build": "tsc"
   },
   "dependencies": {
@@ -13,8 +13,8 @@
     "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
-    "typescript": "^5.4.2",
+    "@types/node": "^20.5.9",
     "ts-node": "^10.9.2",
-    "@types/node": "^20.5.9"
+    "typescript": "^5.4.2"
   }
 }
