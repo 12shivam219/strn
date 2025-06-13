@@ -91,7 +91,7 @@ io.on('connection', (socket) => {
       });
     } catch (error) {
       console.error('Error creating producer transport:', error);
-      callback({ error: error.message });
+      callback({ error: (error as Error).message });
     }
   });
 
@@ -102,7 +102,7 @@ io.on('connection', (socket) => {
       callback();
     } catch (error) {
       console.error('Error connecting transport:', error);
-      callback({ error: error.message });
+      callback({ error: (error as Error).message });
     }
   });
 
@@ -118,7 +118,7 @@ io.on('connection', (socket) => {
       callback({ id: producer.id });
     } catch (error) {
       console.error('Error producing:', error);
-      callback({ error: error.message });
+      callback({ error: (error as Error).message });
     }
   });
 
@@ -141,7 +141,7 @@ io.on('connection', (socket) => {
       });
     } catch (error) {
       console.error('Error creating consumer transport:', error);
-      callback({ error: error.message });
+      callback({ error: (error as Error).message });
     }
   });
 
@@ -152,7 +152,7 @@ io.on('connection', (socket) => {
       callback();
     } catch (error) {
       console.error('Error connecting consumer transport:', error);
-      callback({ error: error.message });
+      callback({ error: (error as Error).message });
     }
   });
 
@@ -191,13 +191,13 @@ io.on('connection', (socket) => {
       });
     } catch (error) {
       console.error('Error consuming:', error);
-      callback({ error: error.message });
+      callback({ error: (error as Error).message });
     }
   });
 
   socket.on('resumeConsumer', async ({ consumerId }, callback) => {
     try {
-      const consumer = peers[socket.id].consumers.find(c => c.id === consumerId);
+      const consumer = peers[socket.id].consumers.find((c: any) => c.id === consumerId);
       if (consumer) {
         await consumer.resume();
         callback({ success: true });
@@ -206,7 +206,7 @@ io.on('connection', (socket) => {
       }
     } catch (error) {
       console.error('Error resuming consumer:', error);
-      callback({ error: error.message });
+      callback({ error: (error as Error).message });
     }
   });
 

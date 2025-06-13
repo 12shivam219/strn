@@ -12,8 +12,7 @@
     "socket.io": "^4.7.5",
     "cors": "^2.8.5",
     "body-parser": "^2.0.1",
-    "express-session": "^1.18.0",
-    "uuid": "^9.0.1"
+    "express-session": "^1.18.0"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
