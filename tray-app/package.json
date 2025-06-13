@@ -1,0 +1,15 @@
+{
+  "name": "tray-app",
+  "version": "1.0.0",
+  "main": "main.ts",
+  "scripts": {
+    "start": "electron .",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "electron": "^28.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2"
+  }
+}

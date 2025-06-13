@@ -1,0 +1,21 @@
+{
+  "name": "auth-streaming-server",
+  "version": "1.0.0",
+  "description": "Server for authentication, signaling, and session control",
+  "main": "index.ts",
+  "scripts": {
+    "start": "ts-node index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "cors": "^2.8.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2",
+    "ts-node": "^10.9.2"
+  },
+  "type": "module"
+}

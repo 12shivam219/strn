@@ -1,0 +1,21 @@
+{
+  "name": "mediasoup-server",
+  "version": "1.0.0",
+  "description": "Mediasoup-based SFU server with WebSocket signaling",
+  "main": "index.ts",
+  "scripts": {
+    "start": "ts-node index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.16.0",
+    "mediasoup": "^3.11.15",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2",
+    "ts-node": "^10.9.2"
+  },
+  "type": "module"
+}
