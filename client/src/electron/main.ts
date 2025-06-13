@@ -1,8 +1,4 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { getAudioStream } from '../../../sender/capture/audio_capture';
-import { getVideoStream } from '../../../sender/capture/video_capture';
-import { startSender } from '../../../sender/sender';
-
 import path from 'path';
 
 function createWindow() {
@@ -11,27 +7,27 @@ function createWindow() {
     height: 700,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   });
 
-  win.loadURL('http://localhost:5173');
+  // Load the Vite dev server in development
+  if (process.env.NODE_ENV === 'development') {
+    win.loadURL('http://localhost:5173');
+    win.webContents.openDevTools();
+  } else {
+    win.loadFile(path.join(__dirname, '../dist/index.html'));
+  }
 }
 
-
 ipcMain.handle('toggle-stream', async () => {
-  const video = await getVideoStream();
-  const audio = await getAudioStream();
-  await startSender(video, audio);
+  console.log('[Electron] Stream toggle requested');
+  return { success: true, message: 'Stream toggled' };
 });
-
 
 app.whenReady().then(() => {
   createWindow();
-
-  ipcMain.handle('toggle-stream', () => {
-    console.log('[Electron] Stream toggled');
-    // In future: call sender/receiver logic
-  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

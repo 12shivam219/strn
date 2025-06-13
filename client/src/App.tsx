@@ -1,11 +1,11 @@
-import Home from 'pages/Home';
 import React from 'react';
-// import Home from './pages/Home';
+import Home from './pages/Home';
+import './index.css';
 
 const App = () => {
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <Home/>
+    <div className="min-h-screen bg-gray-900 text-white">
+      <Home />
     </div>
   );
 };

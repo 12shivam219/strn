@@ -3,16 +3,18 @@
   "version": "1.0.0",
   "description": "Captures local system audio/video and sends via WebRTC",
   "main": "sender.ts",
+  "type": "module",
   "scripts": {
-    "start": "ts-node-esm --loader ts-node/esm sender.ts",
+    "start": "ts-node --esm sender.ts",
     "build": "tsc"
   },
   "dependencies": {
-    "@koush/wrtc": "^0.4.7",
     "mediasoup-client": "^3.6.69",
     "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
-    "ts-node": "^10.9.2"
-  }}
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.5.9"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "crossstream",
+  "version": "1.0.0",
+  "description": "Cross-platform streaming application",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:auth\" \"npm run dev:mediasoup\" \"npm run dev:client\"",
+    "dev:auth": "cd auth-streaming-server && npm start",
+    "dev:mediasoup": "cd mediasoup-server && npm start",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "npm install && cd auth-streaming-server && npm install && cd ../mediasoup-server && npm install && cd ../client && npm install && cd ../sender && npm install && cd ../receiver && npm install && cd ../tray-app && npm install",
+    "build": "cd client && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

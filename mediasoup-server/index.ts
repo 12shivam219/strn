@@ -1,12 +1,20 @@
-// mediasoup-server/index.ts
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import mediasoup from 'mediasoup';
+import cors from 'cors';
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+app.use(cors());
+app.use(express.json());
 
 const mediasoupWorkers: any[] = [];
 let router: any;
@@ -60,92 +68,156 @@ io.on('connection', (socket) => {
     callback(router.rtpCapabilities);
   });
 
+  socket.on('getRouterRtpCapabilities', (callback) => {
+    callback(router.rtpCapabilities);
+  });
+
   socket.on('createProducerTransport', async (callback) => {
-    const transport = await router.createWebRtcTransport({
-      listenIps: [{ ip: '0.0.0.0', announcedIp: null }],
-      enableUdp: true,
-      enableTcp: true,
-      preferUdp: true,
-    });
+    try {
+      const transport = await router.createWebRtcTransport({
+        listenIps: [{ ip: '0.0.0.0', announcedIp: null }],
+        enableUdp: true,
+        enableTcp: true,
+        preferUdp: true,
+      });
 
-    peers[socket.id].transports.push(transport);
+      peers[socket.id].transports.push(transport);
 
-    callback({
-      id: transport.id,
-      iceParameters: transport.iceParameters,
-      iceCandidates: transport.iceCandidates,
-      dtlsParameters: transport.dtlsParameters,
-    });
+      callback({
+        id: transport.id,
+        iceParameters: transport.iceParameters,
+        iceCandidates: transport.iceCandidates,
+        dtlsParameters: transport.dtlsParameters,
+      });
+    } catch (error) {
+      console.error('Error creating producer transport:', error);
+      callback({ error: error.message });
+    }
   });
 
   socket.on('connectTransport', async ({ dtlsParameters }, callback) => {
-    const transport = peers[socket.id].transports.slice(-1)[0];
-    await transport.connect({ dtlsParameters });
-    callback();
+    try {
+      const transport = peers[socket.id].transports.slice(-1)[0];
+      await transport.connect({ dtlsParameters });
+      callback();
+    } catch (error) {
+      console.error('Error connecting transport:', error);
+      callback({ error: error.message });
+    }
   });
 
   socket.on('produce', async ({ kind, rtpParameters }, callback) => {
-    const transport = peers[socket.id].transports.slice(-1)[0];
-    const producer = await transport.produce({ kind, rtpParameters });
-    peers[socket.id].producers.push(producer);
-    callback({ id: producer.id });
+    try {
+      const transport = peers[socket.id].transports.slice(-1)[0];
+      const producer = await transport.produce({ kind, rtpParameters });
+      peers[socket.id].producers.push(producer);
+      
+      // Notify other clients about new producer
+      socket.broadcast.emit('newProducer', { producerId: producer.id, kind });
+      
+      callback({ id: producer.id });
+    } catch (error) {
+      console.error('Error producing:', error);
+      callback({ error: error.message });
+    }
   });
 
   socket.on('createConsumerTransport', async (rtpCapabilities, callback) => {
-    const transport = await router.createWebRtcTransport({
-      listenIps: [{ ip: '0.0.0.0', announcedIp: null }],
-      enableUdp: true,
-      enableTcp: true,
-      preferUdp: true,
-    });
+    try {
+      const transport = await router.createWebRtcTransport({
+        listenIps: [{ ip: '0.0.0.0', announcedIp: null }],
+        enableUdp: true,
+        enableTcp: true,
+        preferUdp: true,
+      });
 
-    peers[socket.id].transports.push(transport);
+      peers[socket.id].transports.push(transport);
 
-    callback({
-      id: transport.id,
-      iceParameters: transport.iceParameters,
-      iceCandidates: transport.iceCandidates,
-      dtlsParameters: transport.dtlsParameters,
-    });
+      callback({
+        id: transport.id,
+        iceParameters: transport.iceParameters,
+        iceCandidates: transport.iceCandidates,
+        dtlsParameters: transport.dtlsParameters,
+      });
+    } catch (error) {
+      console.error('Error creating consumer transport:', error);
+      callback({ error: error.message });
+    }
   });
 
   socket.on('connectConsumerTransport', async ({ dtlsParameters }, callback) => {
-    const transport = peers[socket.id].transports.slice(-1)[0];
-    await transport.connect({ dtlsParameters });
-    callback();
+    try {
+      const transport = peers[socket.id].transports.slice(-1)[0];
+      await transport.connect({ dtlsParameters });
+      callback();
+    } catch (error) {
+      console.error('Error connecting consumer transport:', error);
+      callback({ error: error.message });
+    }
   });
 
   socket.on('consume', async ({ kind, rtpCapabilities }, callback) => {
-    const producer = Object.values(peers)
-      .flatMap(p => (p as any).producers)
-      .find(p => p.kind === kind);
+    try {
+      // Find a producer of the requested kind from any peer
+      const producer = Object.values(peers)
+        .flatMap(p => (p as any).producers)
+        .find(p => p.kind === kind && !p.closed);
 
-    if (!producer) return callback({});
+      if (!producer) {
+        callback({ error: 'No producer found' });
+        return;
+      }
 
-    const transport = peers[socket.id].transports.slice(-1)[0];
-    if (!router.canConsume({ producerId: producer.id, rtpCapabilities })) return;
+      const transport = peers[socket.id].transports.slice(-1)[0];
+      
+      if (!router.canConsume({ producerId: producer.id, rtpCapabilities })) {
+        callback({ error: 'Cannot consume' });
+        return;
+      }
 
-    const consumer = await transport.consume({
-      producerId: producer.id,
-      rtpCapabilities,
-      paused: false,
-    });
+      const consumer = await transport.consume({
+        producerId: producer.id,
+        rtpCapabilities,
+        paused: false,
+      });
 
-    peers[socket.id].consumers.push(consumer);
-    callback({
-      id: consumer.id,
-      producerId: producer.id,
-      kind: consumer.kind,
-      rtpParameters: consumer.rtpParameters,
-    });
+      peers[socket.id].consumers.push(consumer);
+      
+      callback({
+        id: consumer.id,
+        producerId: producer.id,
+        kind: consumer.kind,
+        rtpParameters: consumer.rtpParameters,
+      });
+    } catch (error) {
+      console.error('Error consuming:', error);
+      callback({ error: error.message });
+    }
+  });
+
+  socket.on('resumeConsumer', async ({ consumerId }, callback) => {
+    try {
+      const consumer = peers[socket.id].consumers.find(c => c.id === consumerId);
+      if (consumer) {
+        await consumer.resume();
+        callback({ success: true });
+      } else {
+        callback({ error: 'Consumer not found' });
+      }
+    } catch (error) {
+      console.error('Error resuming consumer:', error);
+      callback({ error: error.message });
+    }
   });
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
-    (peers[socket.id]?.transports || []).forEach((t: any) => t.close());
-    (peers[socket.id]?.producers || []).forEach((p: any) => p.close());
-    (peers[socket.id]?.consumers || []).forEach((c: any) => c.close());
-    delete peers[socket.id];
+    if (peers[socket.id]) {
+      (peers[socket.id]?.transports || []).forEach((t: any) => t.close());
+      (peers[socket.id]?.producers || []).forEach((p: any) => p.close());
+      (peers[socket.id]?.consumers || []).forEach((c: any) => c.close());
+      delete peers[socket.id];
+    }
   });
 });
 
