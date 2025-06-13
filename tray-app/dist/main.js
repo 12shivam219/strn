@@ -10,15 +10,17 @@ const child_process_1 = require("child_process");
 let tray = null;
 let senderProcess = null;
 function createTray() {
-    tray = new electron_1.Tray(path_1.default.join(__dirname, 'icon.png'));
+    // Always resolve icon relative to the project root, not dist
+    const iconPath = path_1.default.join(__dirname, '..', 'icon.png');
+    tray = new electron_1.Tray(iconPath);
     const contextMenu = electron_1.Menu.buildFromTemplate([
         {
             label: 'Start Streaming',
             click: () => {
                 if (!senderProcess) {
-                    senderProcess = (0, child_process_1.spawn)('node', [path_1.default.join(__dirname, '../sender/index.js')], {
+                    senderProcess = (0, child_process_1.spawn)('node', [path_1.default.join(__dirname, '../sender/dist/sender.js')], {
                         stdio: 'inherit',
-                        shell: true,
+                        shell: false, // Use false for better module support
                     });
                     tray?.setToolTip('Streaming: Active ✅');
                 }

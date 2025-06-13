@@ -469,3 +469,11 @@ try {
   console.error('Failed to start streaming:', error);
 }
 */
+
+// Auto-start receiver if run directly
+if (require.main === module) {
+  startReceiver().catch(err => {
+    console.error('Receiver failed to start:', err);
+    process.exit(1);
+  });
+}

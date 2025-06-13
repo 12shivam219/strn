@@ -1,9 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Controls from '../components/Controls';
 import AVSender from '../components/AVSender';
 import AVReceiver from '../components/AVReceiver';
+import Auth from '../components/Auth';
 
 const Home = () => {
+  const [user, setUser] = useState<{ username: string, streamId: string } | null>(null);
+
+  if (!user) {
+    return <Auth onAuth={setUser} />;
+  }
+
   return (
     <div className="container mx-auto px-6 py-8">
       <div className="text-center mb-8">
@@ -11,7 +18,7 @@ const Home = () => {
           🎥 CrossStream
         </h1>
         <p className="text-gray-400 text-lg">
-          Cross-platform streaming application
+          Welcome, {user.username}! Your Stream ID: <span className="font-mono text-green-400">{user.streamId}</span>
         </p>
       </div>
       

@@ -4,17 +4,18 @@
   "description": "Receives audio/video stream and outputs to virtual devices",
   "main": "receiver.ts",
   "scripts": {
-    "start": "ts-node receiver.ts",
+    "start": "node dist/receiver.js",
+    "dev": "ts-node receiver.ts",
     "build": "tsc"
   },
   "dependencies": {
-    "wrtc": "^0.4.7",
+    "mediasoup-client": "^3.6.69",
     "socket.io-client": "^4.7.5",
-    "mediasoup-client": "^3.6.69"
+    "wrtc": "^0.4.7"
   },
   "devDependencies": {
-    "typescript": "^5.4.2",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.2"
   },
   "type": "module"
 }

@@ -21,7 +21,8 @@ function createWindow() {
         win.webContents.openDevTools();
     }
     else {
-        win.loadFile(path_1.default.join(__dirname, '../dist/index.html'));
+        // Load the built index.html from the dist folder
+        win.loadFile(path_1.default.join(__dirname, '../../dist/index.html'));
     }
 }
 electron_1.ipcMain.handle('toggle-stream', async () => {

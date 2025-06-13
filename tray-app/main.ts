@@ -7,16 +7,18 @@ let tray: Tray | null = null;
 let senderProcess: any = null;
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, 'icon.png'));
+  // Always resolve icon relative to the project root, not dist
+  const iconPath = path.join(__dirname, '..', 'icon.png');
+  tray = new Tray(iconPath);
 
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Start Streaming',
       click: () => {
         if (!senderProcess) {
-          senderProcess = spawn('node', [path.join(__dirname, '../sender/index.js')], {
+          senderProcess = spawn('node', [path.resolve(__dirname, '..', '..', 'sender', 'dist', 'sender.js')], {
             stdio: 'inherit',
-            shell: true,
+            shell: false, // Use false for better module support
           });
           tray?.setToolTip('Streaming: Active ✅');
         } else {

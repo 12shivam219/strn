@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "mediasoup-client": "^3.6.69",
-    "socket.io-client": "^4.7.5"
+    "socket.io-client": "^4.7.5",
+    "wrtc": "^0.4.7"
   },
   "devDependencies": {
     "@types/node": "^20.5.9",

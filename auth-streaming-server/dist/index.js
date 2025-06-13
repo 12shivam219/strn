@@ -61,6 +61,9 @@ const validateAccess = (req, res) => {
     res.send('Access granted');
 };
 // Routes
+app.get('/', (req, res) => {
+    res.send('🔐 Auth Streaming Server is running!');
+});
 app.post('/api/register', registerUser);
 app.post('/api/login', loginUser);
 app.post('/api/stream/share', shareStream);
