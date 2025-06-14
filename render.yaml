@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: crossstream-stack
-    env: docker
-    plan: free
-    dockerComposeFilePath: ./docker-compose.yml
-    autoDeploy: true
