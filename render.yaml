@@ -1,0 +1,5 @@
+services:
+  - type: web
+    name: crossstream-stack
+    env: docker
+    plan: free
