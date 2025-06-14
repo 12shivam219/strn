@@ -8,9 +8,16 @@ const RETRY_DELAY = 1000; // ms
 
 let retryTimeout: NodeJS.Timeout | null = null;
 
-export default function AVReceiver() {
+export default function AVReceiver({
+  roomId,
+  token,
+}: {
+  roomId: string;
+  token: string;
+}) {
   const [status, setStatus] = useState("Idle");
   const videoRef = useRef<HTMLVideoElement>(null);
+  const screenRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<any>(null);
 
   useEffect(() => {
@@ -19,7 +26,7 @@ export default function AVReceiver() {
       try {
         setStatus("Connecting to server...");
         const device = new mediasoupClient.Device();
-        const socket = io(SIGNALING_URL, { timeout: 5000 });
+        const socket = io(SIGNALING_URL, { query: { token } });
         socketRef.current = socket;
 
         // Debug event listeners
@@ -52,6 +59,16 @@ export default function AVReceiver() {
         if (!isMounted) return;
         setStatus("Connected to server.");
 
+        // Join room
+        await new Promise<void>((resolve, reject) => {
+          socket.emit("joinRoom", { roomId }, (resp: any) => {
+            if (resp && resp.success) resolve();
+            else reject(new Error(resp?.error || "Failed to join room"));
+          });
+        });
+        if (!isMounted) return;
+        setStatus("Joined room.");
+
         // Get router RTP capabilities
         const routerRtpCapabilities = await new Promise<any>(
           (resolve, reject) =>
@@ -63,7 +80,7 @@ export default function AVReceiver() {
         if (!isMounted) return;
         await device.load({ routerRtpCapabilities });
 
-        // Create consumer transport
+        // Consume camera video
         const consumerTransportData = await new Promise<any>(
           (resolve, reject) =>
             socket.emit(
@@ -77,61 +94,63 @@ export default function AVReceiver() {
               }
             )
         );
-        if (!isMounted) return;
         const transport = device.createRecvTransport(consumerTransportData);
-        transport.on("connect", ({ dtlsParameters }, callback) => {
+        transport.on("connect", ({ dtlsParameters }: any, callback: any) => {
           socket.emit("connectConsumerTransport", { dtlsParameters }, callback);
         });
-        transport.on("connectionstatechange", (state) => {
+        transport.on("connectionstatechange", (state: any) => {
           if (state === "failed" || state === "closed") {
             setStatus("❌ Transport connection failed");
           }
         });
-        // Retry logic for consuming video
-        async function tryConsume(attempt = 1) {
+        // Helper to consume a kind (video, screen)
+        async function tryConsume(
+          kind: string,
+          ref: React.RefObject<HTMLVideoElement>,
+          attempt = 1
+        ) {
           if (!isMounted) return;
-          const videoResult = await new Promise<any>((resolve) =>
+          const result = await new Promise<any>((resolve) =>
             socket.emit(
               "consume",
               {
-                kind: "video",
+                kind,
                 rtpCapabilities: device.rtpCapabilities,
               },
               (data: any) => resolve(data)
             )
           );
-          if (videoResult.error) {
+          if (result.error) {
             if (attempt < MAX_RETRIES) {
               setStatus(
-                `Retrying to consume video... (attempt ${attempt + 1})`
+                `Retrying to consume ${kind}... (attempt ${attempt + 1})`
               );
               retryTimeout = setTimeout(
-                () => tryConsume(attempt + 1),
+                () => tryConsume(kind, ref, attempt + 1),
                 RETRY_DELAY
               );
             } else {
-              setStatus(
-                `❌ Error: Failed to consume video: ${videoResult.error}`
-              );
+              setStatus(`❌ Error: Failed to consume ${kind}: ${result.error}`);
             }
             return;
           }
-          const videoConsumer = await transport.consume(videoResult);
-          const videoStream = new MediaStream([videoConsumer.track]);
-          if (videoRef.current) {
-            videoRef.current.srcObject = videoStream;
+          const consumer = await transport.consume(result);
+          const stream = new MediaStream([consumer.track]);
+          if (ref.current) {
+            ref.current.srcObject = stream;
           }
-          setStatus("Playing received video.");
+          setStatus(`Playing received ${kind}.`);
         }
-        tryConsume();
+        // Consume camera video
+        tryConsume("video", videoRef);
+        // Consume screen if available
+        tryConsume("screen", screenRef);
       } catch (error) {
-        if (error instanceof Error) {
-          console.error("Error in receiver:", error);
-          setStatus(`❌ Error: ${error.message}`);
-        } else {
-          console.error("Unknown error in receiver:", error);
-          setStatus("❌ Error: Unknown error");
-        }
+        setStatus(
+          `❌ Error: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
       }
 
       return () => {
@@ -151,13 +170,25 @@ export default function AVReceiver() {
       // Cleanup function
       socketRef.current?.disconnect();
     };
-  }, []);
+  }, [roomId, token]);
 
   return (
     <div>
       <h1>AV Receiver</h1>
       <p>Status: {status}</p>
       <video ref={videoRef} autoPlay playsInline style={{ width: "100%" }} />
+      <div className="mt-2">
+        <h3 className="text-sm text-gray-400">Screen Share</h3>
+        <video
+          ref={screenRef}
+          autoPlay
+          playsInline
+          style={{
+            width: "100%",
+            border: "2px solid #4f46e5",
+          }}
+        />
+      </div>
     </div>
   );
 }

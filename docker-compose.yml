@@ -1,0 +1,61 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+
+  coturn:
+    image: instrumentisto/coturn
+    restart: always
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+    environment:
+      - TURN_SECRET=your-secret
+      - REALM=yourdomain.com
+    command:
+      [
+        "-n",
+        "--log-file=stdout",
+        "--lt-cred-mech",
+        "--realm=yourdomain.com",
+        "--user=youruser:yourpass",
+        "--external-ip=auto",
+      ]
+
+  mediasoup-server:
+    build:
+      context: ./mediasoup-server
+    restart: always
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NODE_ENV=production
+    depends_on:
+      - redis
+    ports:
+      - "3000:3000"
+
+  auth-streaming-server:
+    build:
+      context: ./auth-streaming-server
+    restart: always
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - NODE_ENV=production
+    depends_on:
+      - redis
+    ports:
+      - "4000:4000"
+
+  client:
+    build:
+      context: ./client
+    restart: always
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "5173:5173"

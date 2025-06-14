@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coturn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coturn
+  template:
+    metadata:
+      labels:
+        app: coturn
+    spec:
+      containers:
+        - name: coturn
+          image: instrumentisto/coturn
+          ports:
+            - containerPort: 3478
+              protocol: UDP
+            - containerPort: 3478
+              protocol: TCP
+          env:
+            - name: TURN_SECRET
+              value: "your-secret"
+            - name: REALM
+              value: "yourdomain.com"
+          args:
+            [
+              "-n",
+              "--log-file=stdout",
+              "--lt-cred-mech",
+              "--realm=yourdomain.com",
+              "--user=youruser:yourpass",
+              "--external-ip=auto",
+            ]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coturn
+spec:
+  ports:
+    - port: 3478
+      protocol: UDP
+    - port: 3478
+      protocol: TCP
+  selector:
+    app: coturn

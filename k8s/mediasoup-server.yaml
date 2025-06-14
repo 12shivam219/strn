@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediasoup-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mediasoup-server
+  template:
+    metadata:
+      labels:
+        app: mediasoup-server
+    spec:
+      containers:
+        - name: mediasoup-server
+          image: yourrepo/mediasoup-server:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: NODE_ENV
+              value: "production"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediasoup-server
+spec:
+  ports:
+    - port: 3000
+  selector:
+    app: mediasoup-server

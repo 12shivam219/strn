@@ -1,0 +1,22 @@
+# Prometheus alert rule for CrossStream
+# Save as prometheus-alerts.yml and load in your Prometheus config
+
+groups:
+  - name: crossstream-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: increase(http_requests_total{job="mediasoup-server"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on mediasoup-server"
+          description: "More than 10 errors in 5 minutes. Check logs."
+      - alert: InstanceDown
+        expr: up{job="mediasoup-server"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "mediasoup-server is down"
+          description: "No health check response from mediasoup-server."

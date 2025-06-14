@@ -1,55 +1,45 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as mediasoupClient from "mediasoup-client";
 import { io } from "socket.io-client";
+import ScreenShareButton from "./ScreenShareButton";
 
-const SIGNALING_URL = "http://localhost:3000"; // Update if needed
+const SIGNALING_URL = "http://localhost:3000";
 
-export default function AVSender() {
+export default function AVSender({
+  roomId,
+  token,
+}: {
+  roomId: string;
+  token: string;
+}) {
   const [status, setStatus] = useState("Idle");
   const [producerId, setProducerId] = useState<string | null>(null);
+  const [screenProducerId, setScreenProducerId] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const deviceRef = useRef<any>(null);
+  const socketRef = useRef<any>(null);
+  const transportRef = useRef<any>(null);
+  const screenProducerRef = useRef<any>(null);
+
   useEffect(() => {
     async function start() {
       try {
         setStatus("Requesting media...");
-        console.log("Requesting media access...");
-
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
         });
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-
+        if (videoRef.current) videoRef.current.srcObject = stream;
         setStatus("Connecting to server...");
-        console.log("Initializing connection...");
-
         const device = new mediasoupClient.Device();
-        const socket = io(SIGNALING_URL);
-
-        // Debug event listeners
-        socket.on("connect_error", (error) => {
-          console.error("Socket connection error:", error);
-          setStatus(`❌ Connection error: ${error.message}`);
-        });
-
-        socket.on("disconnect", (reason) => {
-          console.log("Socket disconnected:", reason);
-          setStatus(`Disconnected: ${reason}`);
-        });
-
-        // Wait for connection
+        deviceRef.current = device;
+        const socket = io(SIGNALING_URL, { query: { token } });
+        socketRef.current = socket;
         await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error("Connection timeout"));
-          }, 5000);
-
-          socket.on("connect", () => {
-            clearTimeout(timeout);
-            console.log("Connected to server");
-            resolve();
+          socket.emit("joinRoom", { roomId }, (resp: any) => {
+            if (resp && resp.success) resolve();
+            else reject(new Error(resp?.error || "Failed to join room"));
           });
         });
 
@@ -189,14 +179,93 @@ export default function AVSender() {
       }
     }
     start();
-  }, []);
+  }, [roomId, token]);
+
+  // Screen sharing logic
+  const startScreenShare = async (screenStream: MediaStream) => {
+    setIsSharing(true);
+    setStatus("Sharing screen...");
+    try {
+      const device = deviceRef.current;
+      const socket = socketRef.current;
+      // Create a new transport for screen
+      const transportData = await new Promise<any>((resolve, reject) => {
+        socket.emit("createProducerTransport", (data: any) => {
+          if (data.error) reject(new Error(data.error));
+          else resolve(data);
+        });
+      });
+      const transport = device.createSendTransport(transportData);
+      transportRef.current = transport;
+      transport.on(
+        "connect",
+        ({ dtlsParameters }: any, callback: any, errback: any) => {
+          socket.emit(
+            "connectTransport",
+            { dtlsParameters },
+            (response: any) => {
+              if (response && response.error)
+                errback(new Error(response.error));
+              else callback();
+            }
+          );
+        }
+      );
+      transport.on(
+        "produce",
+        ({ kind, rtpParameters }: any, callback: any, errback: any) => {
+          socket.emit("produce", { kind, rtpParameters }, (response: any) => {
+            if (response && response.error) errback(new Error(response.error));
+            else callback({ id: response.id });
+          });
+        }
+      );
+      const videoTrack = screenStream.getVideoTracks()[0];
+      if (!videoTrack) throw new Error("No video track in screen stream");
+      const screenProducer = await transport.produce({
+        track: videoTrack,
+        appData: { screen: true },
+      });
+      setScreenProducerId(screenProducer.id);
+      screenProducerRef.current = screenProducer;
+      screenProducer.on("transportclose", () => {
+        setIsSharing(false);
+        setScreenProducerId(null);
+        setStatus("Screen share stopped");
+      });
+      videoTrack.onended = () => {
+        screenProducer.close();
+        setIsSharing(false);
+        setScreenProducerId(null);
+        setStatus("Screen share stopped");
+      };
+    } catch (err) {
+      setStatus("❌ Screen share error");
+      setIsSharing(false);
+    }
+  };
+
+  const stopScreenShare = () => {
+    if (screenProducerRef.current) {
+      screenProducerRef.current.close();
+      setIsSharing(false);
+      setScreenProducerId(null);
+      setStatus("Screen share stopped");
+    }
+  };
 
   return (
     <div>
       <h2>AV Sender</h2>
       <p>Status: {status}</p>
       {producerId && <p>Video Producer ID: {producerId}</p>}
+      {screenProducerId && <p>Screen Producer ID: {screenProducerId}</p>}
       <video ref={videoRef} autoPlay playsInline muted style={{ width: 320 }} />
+      <ScreenShareButton
+        onStart={startScreenShare}
+        onStop={stopScreenShare}
+        isSharing={isSharing}
+      />
     </div>
   );
 }

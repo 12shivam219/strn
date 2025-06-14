@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-streaming-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-streaming-server
+  template:
+    metadata:
+      labels:
+        app: auth-streaming-server
+    spec:
+      containers:
+        - name: auth-streaming-server
+          image: yourrepo/auth-streaming-server:latest
+          ports:
+            - containerPort: 4000
+          env:
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: NODE_ENV
+              value: "production"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-streaming-server
+spec:
+  ports:
+    - port: 4000
+  selector:
+    app: auth-streaming-server

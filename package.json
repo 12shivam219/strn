@@ -12,5 +12,9 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.0"
+  },
+  "dependencies": {
+    "ioredis": "^5.6.1",
+    "prom-client": "^15.1.3"
   }
 }

@@ -3,6 +3,10 @@ import http from 'http';
 import { Server } from 'socket.io';
 import mediasoup from 'mediasoup';
 import cors from 'cors';
+import Redis from 'ioredis';
+import client from 'prom-client';
+import fs from 'fs';
+import path from 'path';
 
 const app = express();
 const server = http.createServer(app);
@@ -16,9 +20,55 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
+// Redis setup for pub/sub and distributed state
+const redisHost = process.env.REDIS_HOST || '127.0.0.1';
+const redisPort = Number(process.env.REDIS_PORT) || 6379;
+const redis = new Redis(redisPort, redisHost);
+const pub = new Redis(redisPort, redisHost);
+const sub = new Redis(redisPort, redisHost);
+
+// Prometheus metrics
+const collectDefaultMetrics = client.collectDefaultMetrics;
+collectDefaultMetrics();
+const requestCounter = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+});
+
 const mediasoupWorkers: any[] = [];
 let router: any;
-const peers: any = {}; // peerId -> transports, producers, consumers
+
+// Redis-based room and peer state
+// Each room is a Redis hash: room:{roomId} -> { peers: [peerId, ...] }
+// Each peer is a Redis hash: peer:{peerId} -> { transports, producers, consumers, roomId }
+
+// Helper functions for Redis state
+async function addPeerToRoom(roomId: string, peerId: string) {
+  await redis.sadd(`room:${roomId}:peers`, peerId);
+  await redis.hset(`peer:${peerId}`, 'roomId', roomId);
+}
+async function removePeerFromRoom(roomId: string, peerId: string) {
+  await redis.srem(`room:${roomId}:peers`, peerId);
+  await redis.del(`peer:${peerId}`);
+}
+async function getPeersInRoom(roomId: string) {
+  return await redis.smembers(`room:${roomId}:peers`);
+}
+async function setPeerData(peerId: string, key: string, value: string) {
+  await redis.hset(`peer:${peerId}`, key, value);
+}
+async function getPeerData(peerId: string, key: string) {
+  return await redis.hget(`peer:${peerId}`, key);
+}
+
+// Helper for storing/retrieving JSON arrays in Redis
+async function setPeerArray(peerId: string, key: string, arr: any[]) {
+  await redis.hset(`peer:${peerId}`, key, JSON.stringify(arr));
+}
+async function getPeerArray(peerId: string, key: string) {
+  const val = await redis.hget(`peer:${peerId}`, key);
+  return val ? JSON.parse(val) : [];
+}
 
 async function createWorker() {
   const worker = await mediasoup.createWorker({
@@ -55,14 +105,25 @@ async function createRouter() {
   });
 }
 
+io.use(async (socket, next) => {
+  const token = socket.handshake.query?.token as string;
+  // TODO: Validate token (e.g., check with auth-streaming-server or JWT)
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
+  // For demo, accept any non-empty token
+  // In production, verify token with auth server or JWT
+  next();
+});
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
-  peers[socket.id] = {
-    transports: [],
-    producers: [],
-    consumers: [],
-  };
+  // Expect client to join a room
+  socket.on('joinRoom', async ({ roomId }, callback) => {
+    await addPeerToRoom(roomId, socket.id);
+    callback({ success: true });
+  });
 
   socket.on('getRtpCapabilities', (callback) => {
     callback(router.rtpCapabilities);
@@ -72,6 +133,7 @@ io.on('connection', (socket) => {
     callback(router.rtpCapabilities);
   });
 
+  // --- Replace in-memory peer state with Redis ---
   socket.on('createProducerTransport', async (callback) => {
     try {
       const transport = await router.createWebRtcTransport({
@@ -79,10 +141,18 @@ io.on('connection', (socket) => {
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
+        // iceServers: [
+        //   { urls: 'stun:stun.l.google.com:19302' },
+        //   { urls: 'turn:your.turn.server:3478', username: 'user', credential: 'pass' }
+        // ]
       });
-
-      peers[socket.id].transports.push(transport);
-
+      const transports = await getPeerArray(socket.id, 'transports');
+      transports.push(transport.id);
+      await setPeerArray(socket.id, 'transports', transports);
+      // Store transport object in memory for now (mediasoup objects can't be serialized)
+      socket.data = socket.data || {};
+      socket.data.transports = socket.data.transports || {};
+      socket.data.transports[transport.id] = transport;
       callback({
         id: transport.id,
         iceParameters: transport.iceParameters,
@@ -90,52 +160,45 @@ io.on('connection', (socket) => {
         dtlsParameters: transport.dtlsParameters,
       });
     } catch (error) {
-      console.error('Error creating producer transport:', error);
       callback({ error: (error as Error).message });
     }
   });
 
-  socket.on('connectTransport', async ({ dtlsParameters }, callback) => {
+  socket.on('connectTransport', async ({ dtlsParameters, transportId }, callback) => {
     try {
-      const transport = peers[socket.id].transports.slice(-1)[0];
+      const transport = socket.data?.transports?.[transportId];
+      if (!transport) throw new Error('No transport found');
       await transport.connect({ dtlsParameters });
       callback();
     } catch (error) {
-      console.error('Error connecting transport:', error);
       callback({ error: (error as Error).message });
     }
   });
-  socket.on('produce', async ({ kind, rtpParameters }, callback) => {
-    try {
-      console.log(`[${socket.id}] Producing ${kind}...`);
-      const transport = peers[socket.id].transports.slice(-1)[0];
-      
-      if (!transport) {
-        throw new Error('No transport found');
-      }
 
+  socket.on('produce', async ({ kind, rtpParameters, transportId }, callback) => {
+    try {
+      const transport = socket.data?.transports?.[transportId];
+      if (!transport) throw new Error('No transport found');
       const producer = await transport.produce({ kind, rtpParameters });
-      console.log(`[${socket.id}] Created ${kind} producer: ${producer.id}`);
-      
-      peers[socket.id].producers.push(producer);
-      
-      // Log all current producers
-      console.log('Current producers:');
-      Object.keys(peers).forEach(peerId => {
-        const peerProducers = peers[peerId].producers || [];
-        console.log(`- Peer ${peerId}: ${peerProducers.length} producers`);
-        peerProducers.forEach((p: any) => {
-          console.log(`  - ${p.kind}: ${p.id} (closed: ${p.closed})`);
-        });
+      const producers = await getPeerArray(socket.id, 'producers');
+      producers.push(producer.id);
+      await setPeerArray(socket.id, 'producers', producers);
+      socket.data.producers = socket.data.producers || {};
+      socket.data.producers[producer.id] = producer;
+      // Notify all peers in the room
+      const roomId = await getPeerData(socket.id, 'roomId');
+      if (!roomId || typeof roomId !== 'string') {
+        callback({ error: 'Not in a room' });
+        return;
+      }
+      const peerIds = await getPeersInRoom(roomId);
+      peerIds.forEach((pid: string) => {
+        if (pid !== socket.id) io.to(pid).emit('newProducer', { producerId: producer.id, kind });
       });
-      
-      // Notify other clients about new producer
-      socket.broadcast.emit('newProducer', { producerId: producer.id, kind });
-      console.log(`[${socket.id}] Broadcasted new ${kind} producer ${producer.id}`);
-      
+      // Notify cluster
+      await notifyNewProducer(roomId, producer.id, kind);
       callback({ id: producer.id });
     } catch (error) {
-      console.error('Error producing:', error);
       callback({ error: (error as Error).message });
     }
   });
@@ -147,10 +210,14 @@ io.on('connection', (socket) => {
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
+        // iceServers: [ ... ]
       });
-
-      peers[socket.id].transports.push(transport);
-
+      const transports = await getPeerArray(socket.id, 'transports');
+      transports.push(transport.id);
+      await setPeerArray(socket.id, 'transports', transports);
+      socket.data = socket.data || {};
+      socket.data.transports = socket.data.transports || {};
+      socket.data.transports[transport.id] = transport;
       callback({
         id: transport.id,
         iceParameters: transport.iceParameters,
@@ -158,78 +225,76 @@ io.on('connection', (socket) => {
         dtlsParameters: transport.dtlsParameters,
       });
     } catch (error) {
-      console.error('Error creating consumer transport:', error);
       callback({ error: (error as Error).message });
     }
   });
 
-  socket.on('connectConsumerTransport', async ({ dtlsParameters }, callback) => {
+  socket.on('connectConsumerTransport', async ({ dtlsParameters, transportId }, callback) => {
     try {
-      const transport = peers[socket.id].transports.slice(-1)[0];
+      const transport = socket.data?.transports?.[transportId];
+      if (!transport) throw new Error('No transport found');
       await transport.connect({ dtlsParameters });
       callback();
     } catch (error) {
-      console.error('Error connecting consumer transport:', error);
       callback({ error: (error as Error).message });
     }
   });
+
   socket.on('consume', async ({ kind, rtpCapabilities }, callback) => {
     try {
-      console.log(`[${socket.id}] Attempting to consume ${kind}...`);
-      
-      // Log available producers before search
-      console.log('Available producers:');
-      Object.keys(peers).forEach(peerId => {
-        const peerProducers = peers[peerId].producers || [];
-        console.log(`- Peer ${peerId}: ${peerProducers.length} producers`);
-        peerProducers.forEach((p: any) => {
-          console.log(`  - ${p.kind}: ${p.id} (closed: ${p.closed})`);
-        });
-      });
-
-      // Find a producer of the requested kind from any peer
-      const producer = Object.values(peers)
-        .flatMap(p => (p as any).producers)
-        .find(p => p.kind === kind && !p.closed);
-
-      if (!producer) {
-        console.log(`[${socket.id}] No ${kind} producer found`);
+      const roomId = await getPeerData(socket.id, 'roomId');
+      if (!roomId || typeof roomId !== 'string') {
+        callback({ error: 'Not in a room' });
+        return;
+      }
+      const peerIds = await getPeersInRoom(roomId);
+      let foundProducer = null;
+      for (const pid of peerIds) {
+        if (pid === socket.id) continue;
+        const producers = await getPeerArray(pid, 'producers');
+        for (const prodId of producers) {
+          const producer = socket.data?.producers?.[prodId];
+          if (producer && producer.kind === kind && !producer.closed) {
+            foundProducer = producer;
+            break;
+          }
+        }
+        if (foundProducer) break;
+      }
+      if (!foundProducer) {
         callback({ error: 'No producer found' });
         return;
       }
-
-      console.log(`[${socket.id}] Found ${kind} producer: ${producer.id}`);
-
-      const transport = peers[socket.id].transports.slice(-1)[0];
-      
-      if (!router.canConsume({ producerId: producer.id, rtpCapabilities })) {
+      const transports = await getPeerArray(socket.id, 'transports');
+      const transport = socket.data?.transports?.[transports[transports.length - 1]];
+      if (!router.canConsume({ producerId: foundProducer.id, rtpCapabilities })) {
         callback({ error: 'Cannot consume' });
         return;
       }
-
       const consumer = await transport.consume({
-        producerId: producer.id,
+        producerId: foundProducer.id,
         rtpCapabilities,
         paused: false,
       });
-
-      peers[socket.id].consumers.push(consumer);
-      
+      const consumers = await getPeerArray(socket.id, 'consumers');
+      consumers.push(consumer.id);
+      await setPeerArray(socket.id, 'consumers', consumers);
+      socket.data.consumers = socket.data.consumers || {};
+      socket.data.consumers[consumer.id] = consumer;
       callback({
         id: consumer.id,
-        producerId: producer.id,
+        producerId: foundProducer.id,
         kind: consumer.kind,
         rtpParameters: consumer.rtpParameters,
       });
     } catch (error) {
-      console.error('Error consuming:', error);
       callback({ error: (error as Error).message });
     }
   });
 
   socket.on('resumeConsumer', async ({ consumerId }, callback) => {
     try {
-      const consumer = peers[socket.id].consumers.find((c: any) => c.id === consumerId);
+      const consumer = socket.data?.consumers?.[consumerId];
       if (consumer) {
         await consumer.resume();
         callback({ success: true });
@@ -237,20 +302,65 @@ io.on('connection', (socket) => {
         callback({ error: 'Consumer not found' });
       }
     } catch (error) {
-      console.error('Error resuming consumer:', error);
       callback({ error: (error as Error).message });
     }
   });
 
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-    if (peers[socket.id]) {
-      (peers[socket.id]?.transports || []).forEach((t: any) => t.close());
-      (peers[socket.id]?.producers || []).forEach((p: any) => p.close());
-      (peers[socket.id]?.consumers || []).forEach((c: any) => c.close());
-      delete peers[socket.id];
+  // --- Chat Feature ---
+  socket.on('chatMessage', async ({ roomId, message, username }) => {
+    if (!roomId || !message) return;
+    // Broadcast to all peers in the room
+    const peerIds = await getPeersInRoom(roomId);
+    peerIds.forEach((pid: string) => {
+      io.to(pid).emit('chatMessage', { username, message, from: socket.id, roomId });
+    });
+    // Optionally, store chat history in Redis (not implemented here)
+  });
+
+  socket.on('disconnect', async () => {
+    const roomId = await getPeerData(socket.id, 'roomId');
+    if (roomId) {
+      await removePeerFromRoom(roomId, socket.id);
+    }
+    // Clean up mediasoup objects in memory
+    if (socket.data) {
+      Object.values(socket.data.transports || {}).forEach((t: any) => t.close());
+      Object.values(socket.data.producers || {}).forEach((p: any) => p.close());
+      Object.values(socket.data.consumers || {}).forEach((c: any) => c.close());
     }
   });
+});
+
+// --- Redis Pub/Sub for SFU Clustering ---
+sub.subscribe('mediasoup-events');
+sub.on('message', async (channel, message) => {
+  if (channel !== 'mediasoup-events') return;
+  const event = JSON.parse(message);
+  // Example: handle new producer notification from another node
+  if (event.type === 'newProducer') {
+    const { roomId, producerId, kind } = event;
+    const peerIds = await getPeersInRoom(roomId);
+    peerIds.forEach((pid: string) => {
+      io.to(pid).emit('newProducer', { producerId, kind });
+    });
+  }
+  // Add more event types as needed for distributed coordination
+});
+
+// When a new producer is created, publish to all nodes
+async function notifyNewProducer(roomId: string, producerId: string, kind: string) {
+  await pub.publish('mediasoup-events', JSON.stringify({ type: 'newProducer', roomId, producerId, kind }));
+}
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
 });
 
 const PORT = process.env.PORT || 3000;
@@ -269,3 +379,22 @@ async function startServer() {
 }
 
 startServer();
+
+// TURN/STUN and Simulcast/SVC config (to be used in router.createWebRtcTransport and router.createRouter)
+// Example TURN config:
+// listenIps: [{ ip: '0.0.0.0', announcedIp: null }]
+
+// Simple file logger
+function logToFile(msg: string) {
+  const logPath = path.join(__dirname, 'server.log');
+  fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
+}
+
+process.on('uncaughtException', (err) => {
+  logToFile(`Uncaught Exception: ${err.stack || err}`);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  logToFile(`Unhandled Rejection: ${reason}`);
+  process.exit(1);
+});
