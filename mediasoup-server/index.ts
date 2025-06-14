@@ -105,15 +105,33 @@ io.on('connection', (socket) => {
       callback({ error: (error as Error).message });
     }
   });
-
   socket.on('produce', async ({ kind, rtpParameters }, callback) => {
     try {
+      console.log(`[${socket.id}] Producing ${kind}...`);
       const transport = peers[socket.id].transports.slice(-1)[0];
+      
+      if (!transport) {
+        throw new Error('No transport found');
+      }
+
       const producer = await transport.produce({ kind, rtpParameters });
+      console.log(`[${socket.id}] Created ${kind} producer: ${producer.id}`);
+      
       peers[socket.id].producers.push(producer);
+      
+      // Log all current producers
+      console.log('Current producers:');
+      Object.keys(peers).forEach(peerId => {
+        const peerProducers = peers[peerId].producers || [];
+        console.log(`- Peer ${peerId}: ${peerProducers.length} producers`);
+        peerProducers.forEach((p: any) => {
+          console.log(`  - ${p.kind}: ${p.id} (closed: ${p.closed})`);
+        });
+      });
       
       // Notify other clients about new producer
       socket.broadcast.emit('newProducer', { producerId: producer.id, kind });
+      console.log(`[${socket.id}] Broadcasted new ${kind} producer ${producer.id}`);
       
       callback({ id: producer.id });
     } catch (error) {
@@ -155,18 +173,32 @@ io.on('connection', (socket) => {
       callback({ error: (error as Error).message });
     }
   });
-
   socket.on('consume', async ({ kind, rtpCapabilities }, callback) => {
     try {
+      console.log(`[${socket.id}] Attempting to consume ${kind}...`);
+      
+      // Log available producers before search
+      console.log('Available producers:');
+      Object.keys(peers).forEach(peerId => {
+        const peerProducers = peers[peerId].producers || [];
+        console.log(`- Peer ${peerId}: ${peerProducers.length} producers`);
+        peerProducers.forEach((p: any) => {
+          console.log(`  - ${p.kind}: ${p.id} (closed: ${p.closed})`);
+        });
+      });
+
       // Find a producer of the requested kind from any peer
       const producer = Object.values(peers)
         .flatMap(p => (p as any).producers)
         .find(p => p.kind === kind && !p.closed);
 
       if (!producer) {
+        console.log(`[${socket.id}] No ${kind} producer found`);
         callback({ error: 'No producer found' });
         return;
       }
+
+      console.log(`[${socket.id}] Found ${kind} producer: ${producer.id}`);
 
       const transport = peers[socket.id].transports.slice(-1)[0];
       
@@ -221,6 +253,19 @@ io.on('connection', (socket) => {
   });
 });
 
-createRouter().then(() => {
-  server.listen(3000, () => console.log('✅ Mediasoup server running on http://localhost:3000'));
-});
+const PORT = process.env.PORT || 3000;
+
+async function startServer() {
+  try {
+    await createRouter();
+    server.listen(PORT, () => {
+      console.log(`✅ Mediasoup server running on http://localhost:${PORT}`);
+      console.log('Waiting for WebSocket connections...');
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();

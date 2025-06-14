@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
-import Controls from '../components/Controls';
-import AVSender from '../components/AVSender';
-import AVReceiver from '../components/AVReceiver';
-import Auth from '../components/Auth';
+import React, { useState } from "react";
+import Controls from "../components/Controls";
+import AVSender from "../components/AVSender";
+import AVReceiver from "../components/AVReceiver";
+import Auth from "../components/Auth";
 
 const Home = () => {
-  const [user, setUser] = useState<{ username: string, streamId: string } | null>(null);
+  const [user, setUser] = useState<{
+    username: string;
+    streamId: string;
+  } | null>(null);
 
   if (!user) {
     return <Auth onAuth={setUser} />;
@@ -18,18 +21,19 @@ const Home = () => {
           🎥 CrossStream
         </h1>
         <p className="text-gray-400 text-lg">
-          Welcome, {user.username}! Your Stream ID: <span className="font-mono text-green-400">{user.streamId}</span>
+          Welcome, {user.username}! Your Stream ID:{" "}
+          <span className="font-mono text-green-400">{user.streamId}</span>
         </p>
       </div>
-      
+
       <div className="max-w-md mx-auto">
         <Controls />
       </div>
-      
+
       <div className="mt-8 text-center text-sm text-gray-500">
         <p>Ready to stream audio and video across platforms</p>
       </div>
-      
+
       <div className="mt-8 flex flex-col md:flex-row justify-center gap-8">
         <AVSender />
         <AVReceiver />
