@@ -146,4 +146,4 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(4000, () => console.log('🔐 Auth streaming server running on http://localhost:4000'));
+server.listen(4000, '0.0.0.0', () => console.log('🔐 Auth streaming server running on http://0.0.0.0:4000'));

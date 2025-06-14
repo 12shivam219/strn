@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Server for authentication, signaling, and session control",
   "main": "index.ts",
+  "type": "module",
   "scripts": {
     "start": "node dist/index.js",
     "dev": "ts-node index.ts",

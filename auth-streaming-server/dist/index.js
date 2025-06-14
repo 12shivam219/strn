@@ -5,6 +5,9 @@ import bodyParser from 'body-parser';
 import session from 'express-session';
 import { Server as SocketIOServer } from 'socket.io';
 import { randomUUID } from 'crypto';
+import client from 'prom-client';
+import fs from 'fs';
+import path from 'path';
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server, { cors: { origin: '*' } });
@@ -13,6 +16,26 @@ app.use(bodyParser.json());
 app.use(session({ secret: 'secret123', resave: false, saveUninitialized: true }));
 const users = {};
 const streamAccess = {};
+// Prometheus metrics
+const collectDefaultMetrics = client.collectDefaultMetrics;
+collectDefaultMetrics();
+const requestCounter = new client.Counter({
+    name: 'http_requests_total',
+    help: 'Total number of HTTP requests',
+});
+// Simple file logger
+function logToFile(msg) {
+    const logPath = path.join(__dirname, 'server.log');
+    fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
+}
+process.on('uncaughtException', (err) => {
+    logToFile(`Uncaught Exception: ${err.stack || err}`);
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+    logToFile(`Unhandled Rejection: ${reason}`);
+    process.exit(1);
+});
 // Register new user
 const registerUser = (req, res) => {
     const { username, password } = req.body;
@@ -60,6 +83,15 @@ const validateAccess = (req, res) => {
     }
     res.send('Access granted');
 };
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+});
 // Routes
 app.get('/', (req, res) => {
     res.send('🔐 Auth Streaming Server is running!');
