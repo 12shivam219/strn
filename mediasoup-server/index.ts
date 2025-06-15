@@ -10,14 +10,19 @@ import path from 'path';
 
 const app = express();
 const server = http.createServer(app);
+const CLIENT_ORIGIN = "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io";
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+    origin: CLIENT_ORIGIN,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
-app.use(cors());
+app.use(cors({
+  origin: CLIENT_ORIGIN,
+  credentials: true
+}));
 app.use(express.json());
 
 // Redis setup for pub/sub and distributed state
