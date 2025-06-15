@@ -3,3 +3,4 @@ services:
     name: crossstream-stack
     env: docker
     plan: free
+    dockerComposeFilePath: ./docker-compose.yml
