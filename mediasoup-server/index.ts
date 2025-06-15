@@ -136,20 +136,21 @@ io.on('connection', (socket) => {
   // --- Replace in-memory peer state with Redis ---
   socket.on('createProducerTransport', async (callback) => {
     try {
+      const roomId = await getPeerData(socket.id, 'roomId');
+      if (!roomId) {
+        console.error(`Socket ${socket.id} tried to create transport without joining a room.`);
+        callback({ error: 'Not in a room. Please join a room first.' });
+        return;
+      }
       const transport = await router.createWebRtcTransport({
         listenIps: [{ ip: '0.0.0.0', announcedIp: null }],
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
-        // iceServers: [
-        //   { urls: 'stun:stun.l.google.com:19302' },
-        //   { urls: 'turn:your.turn.server:3478', username: 'user', credential: 'pass' }
-        // ]
       });
       const transports = await getPeerArray(socket.id, 'transports');
       transports.push(transport.id);
       await setPeerArray(socket.id, 'transports', transports);
-      // Store transport object in memory for now (mediasoup objects can't be serialized)
       socket.data = socket.data || {};
       socket.data.transports = socket.data.transports || {};
       socket.data.transports[transport.id] = transport;
@@ -160,6 +161,7 @@ io.on('connection', (socket) => {
         dtlsParameters: transport.dtlsParameters,
       });
     } catch (error) {
+      console.error('Error in createProducerTransport:', error);
       callback({ error: (error as Error).message });
     }
   });
