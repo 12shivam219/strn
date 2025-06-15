@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "ts-node index.ts",
+    "dev": "ts-node --esm index.ts",
     "build": "tsc"
   },
   "dependencies": {
