@@ -30,7 +30,7 @@ const streamAccess: Record<string, { password?: string, owner: string }> = {};
 
 // Prometheus metrics
 const collectDefaultMetrics = client.collectDefaultMetrics;
-collectDefaultMetrics({ eventLoopMonitoringPrecision: 0 });
+collectDefaultMetrics();
 const requestCounter = new client.Counter({
   name: 'http_requests_total',
   help: 'Total number of HTTP requests',
