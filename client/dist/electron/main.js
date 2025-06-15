@@ -17,7 +17,7 @@ function createWindow() {
     });
     // Load the Vite dev server in development
     if (process.env.NODE_ENV === 'development') {
-        win.loadURL('http://localhost:5173');
+        win.loadURL('https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io');
         win.webContents.openDevTools();
     }
     else {

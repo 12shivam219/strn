@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
-const SIGNALING_URL = "http://localhost:3000";
+const SIGNALING_URL = "https://mediasoup-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io";
 
 export default function Chat({
   roomId,
