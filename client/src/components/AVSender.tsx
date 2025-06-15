@@ -3,7 +3,7 @@ import * as mediasoupClient from "mediasoup-client";
 import { io } from "socket.io-client";
 import ScreenShareButton from "./ScreenShareButton";
 
-const SIGNALING_URL = "https://mediasoup-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io";
+const SIGNALING_URL = "https://strn-rbdx.onrender.com/";
 
 export default function AVSender({
   roomId,
