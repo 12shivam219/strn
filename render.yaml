@@ -1,6 +1,36 @@
 services:
   - type: web
-    name: crossstream-stack
+    name: nginx-gateway
     env: docker
     plan: free
-    dockerComposeFilePath: ./docker-compose.yml
+    dockerfilePath: ./nginx-gateway/Dockerfile
+    buildCommand: ""
+    startCommand: ""
+    envVars: []
+    
+  - type: web
+    name: client
+    env: docker
+    plan: free
+    dockerfilePath: ./client/Dockerfile
+    buildCommand: ""
+    startCommand: ""
+    envVars: []
+    
+  - type: web
+    name: auth-streaming-server
+    env: docker
+    plan: free
+    dockerfilePath: ./auth-streaming-server/Dockerfile
+    buildCommand: ""
+    startCommand: ""
+    envVars: []
+    
+  - type: web
+    name: mediasoup-server
+    env: docker
+    plan: free
+    dockerfilePath: ./mediasoup-server/Dockerfile
+    buildCommand: ""
+    startCommand: ""
+    envVars: []
