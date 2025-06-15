@@ -1,0 +1,27 @@
+{
+  "family": "nginx-gateway-task",
+  "executionRoleArn": "arn:aws:iam::703671904307:role/ecsTaskExecutionRole",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "nginx-gateway",
+      "image": "703671904307.dkr.ecr.us-east-1.amazonaws.com/my-nginx-gateway:latest",
+      "portMappings": [
+        { "containerPort": 80, "protocol": "tcp" }
+      ],
+      "essential": true,
+      "environment": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/nginx-gateway",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

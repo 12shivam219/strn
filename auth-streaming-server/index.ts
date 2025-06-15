@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import client from 'prom-client';
 import fs from 'fs';
 import path from 'path';
+import pino from 'pino';
 
 declare module 'express-session' {
   interface SessionData {
@@ -18,6 +19,7 @@ declare module 'express-session' {
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server, { cors: { origin: '*' } });
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -34,6 +36,12 @@ const requestCounter = new client.Counter({
   help: 'Total number of HTTP requests',
 });
 
+// Log incoming requests
+app.use((req, res, next) => {
+  logger.info({ method: req.method, url: req.url, ip: req.ip }, 'Incoming request');
+  next();
+});
+
 // Simple file logger
 function logToFile(msg: string) {
   const logPath = path.join(__dirname, 'server.log');
@@ -41,11 +49,11 @@ function logToFile(msg: string) {
 }
 
 process.on('uncaughtException', (err) => {
-  logToFile(`Uncaught Exception: ${err.stack || err}`);
+  logger.error({ err }, 'Uncaught Exception');
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-  logToFile(`Unhandled Rejection: ${reason}`);
+  logger.error({ reason }, 'Unhandled Rejection');
   process.exit(1);
 });
 
@@ -54,6 +62,7 @@ const registerUser: RequestHandler = (req: Request, res: Response): void => {
   const { username, password } = req.body;
   
   if (users[username]) {
+    logger.warn({ username }, 'Registration failed: username taken');
     res.status(409).send('Username already taken');
     return;
   }
@@ -61,6 +70,7 @@ const registerUser: RequestHandler = (req: Request, res: Response): void => {
   const streamId = randomUUID();
   users[username] = { username, password, streamId };
   streamAccess[streamId] = { owner: username };
+  logger.info({ username, streamId }, 'User registered');
 
   res.json({ streamId });
 };
@@ -71,11 +81,13 @@ const loginUser: RequestHandler = (req: Request, res: Response): void => {
   const user = users[username];
 
   if (!user || user.password !== password) {
+    logger.warn({ username }, 'Login failed: invalid credentials');
     res.status(401).send('Invalid credentials');
     return;
   }
   
   req.session.user = user;
+  logger.info({ username }, 'User logged in');
   res.json({ username, streamId: user.streamId });
 };
 
