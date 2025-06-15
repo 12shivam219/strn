@@ -59,3 +59,14 @@ services:
       - NODE_ENV=production
     ports:
       - "5173:5173"
+
+  nginx-gateway:
+    build:
+      context: ./nginx-gateway
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - client
+      - auth-streaming-server
+      - mediasoup-server
