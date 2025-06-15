@@ -3,10 +3,10 @@ import http from 'http';
 import { Server } from 'socket.io';
 import mediasoup from 'mediasoup';
 import cors from 'cors';
-import Redis from 'ioredis';
 import client from 'prom-client';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const server = http.createServer(app);
@@ -25,13 +25,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Redis setup for pub/sub and distributed state
-const redisHost = process.env.REDIS_HOST || '127.0.0.1';
-const redisPort = Number(process.env.REDIS_PORT) || 6379;
-const redis = new Redis(redisPort, redisHost);
-const pub = new Redis(redisPort, redisHost);
-const sub = new Redis(redisPort, redisHost);
-
 // Prometheus metrics
 const collectDefaultMetrics = client.collectDefaultMetrics;
 collectDefaultMetrics();
@@ -43,36 +36,38 @@ const requestCounter = new client.Counter({
 const mediasoupWorkers: any[] = [];
 let router: any;
 
-// Redis-based room and peer state
-// Each room is a Redis hash: room:{roomId} -> { peers: [peerId, ...] }
-// Each peer is a Redis hash: peer:{peerId} -> { transports, producers, consumers, roomId }
+// --- REMOVE REDIS ---
+// In-memory room and peer state
+const rooms: Record<string, Set<string>> = {};
+const peers: Record<string, any> = {};
 
-// Helper functions for Redis state
+// Helper functions for in-memory state
 async function addPeerToRoom(roomId: string, peerId: string) {
-  await redis.sadd(`room:${roomId}:peers`, peerId);
-  await redis.hset(`peer:${peerId}`, 'roomId', roomId);
+  if (!rooms[roomId]) rooms[roomId] = new Set();
+  rooms[roomId].add(peerId);
+  peers[peerId] = peers[peerId] || {};
+  peers[peerId].roomId = roomId;
 }
 async function removePeerFromRoom(roomId: string, peerId: string) {
-  await redis.srem(`room:${roomId}:peers`, peerId);
-  await redis.del(`peer:${peerId}`);
+  if (rooms[roomId]) rooms[roomId].delete(peerId);
+  delete peers[peerId];
 }
 async function getPeersInRoom(roomId: string) {
-  return await redis.smembers(`room:${roomId}:peers`);
+  return rooms[roomId] ? Array.from(rooms[roomId]) : [];
 }
 async function setPeerData(peerId: string, key: string, value: string) {
-  await redis.hset(`peer:${peerId}`, key, value);
+  peers[peerId] = peers[peerId] || {};
+  peers[peerId][key] = value;
 }
 async function getPeerData(peerId: string, key: string) {
-  return await redis.hget(`peer:${peerId}`, key);
+  return peers[peerId]?.[key];
 }
-
-// Helper for storing/retrieving JSON arrays in Redis
 async function setPeerArray(peerId: string, key: string, arr: any[]) {
-  await redis.hset(`peer:${peerId}`, key, JSON.stringify(arr));
+  peers[peerId] = peers[peerId] || {};
+  peers[peerId][key] = arr;
 }
 async function getPeerArray(peerId: string, key: string) {
-  const val = await redis.hget(`peer:${peerId}`, key);
-  return val ? JSON.parse(val) : [];
+  return peers[peerId]?.[key] || [];
 }
 
 async function createWorker() {
@@ -337,24 +332,11 @@ io.on('connection', (socket) => {
 });
 
 // --- Redis Pub/Sub for SFU Clustering ---
-sub.subscribe('mediasoup-events');
-sub.on('message', async (channel, message) => {
-  if (channel !== 'mediasoup-events') return;
-  const event = JSON.parse(message);
-  // Example: handle new producer notification from another node
-  if (event.type === 'newProducer') {
-    const { roomId, producerId, kind } = event;
-    const peerIds = await getPeersInRoom(roomId);
-    peerIds.forEach((pid: string) => {
-      io.to(pid).emit('newProducer', { producerId, kind });
-    });
-  }
-  // Add more event types as needed for distributed coordination
-});
+// REMOVE Redis pub/sub code
 
 // When a new producer is created, publish to all nodes
 async function notifyNewProducer(roomId: string, producerId: string, kind: string) {
-  await pub.publish('mediasoup-events', JSON.stringify({ type: 'newProducer', roomId, producerId, kind }));
+  // REMOVE Redis publish code
 }
 
 // Health check endpoint
@@ -391,6 +373,8 @@ startServer();
 
 // Simple file logger
 function logToFile(msg: string) {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
   const logPath = path.join(__dirname, 'server.log');
   fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
 }
