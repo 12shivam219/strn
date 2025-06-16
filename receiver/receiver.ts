@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { spawn, ChildProcess } from 'child_process';
 import { Writable } from 'stream';
 
-const SIGNALING_URL = 'http://localhost:3000';
+const SIGNALING_URL = 'https://auth-streaming-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io';
 
 // Type definitions
 interface TransportOptions {
@@ -33,13 +33,13 @@ class VirtualDeviceStreamer {
   private ffmpegProcess?: ChildProcess;
   private isStreaming = false;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  private maxReconnectAttempts = 10;
 
   constructor() {
     this.device = new mediasoupClient.Device();
     this.socket = io(SIGNALING_URL, {
       transports: ['websocket'],
-      timeout: 20000,
+      timeout: 60000,
       forceNew: true
     });
     
@@ -85,7 +85,7 @@ class VirtualDeviceStreamer {
 
       const timeout = setTimeout(() => {
         reject(new Error('Socket connection timeout'));
-      }, 30000);
+      }, 60000);
 
       this.socket.once('connect', () => {
         clearTimeout(timeout);
@@ -107,7 +107,7 @@ class VirtualDeviceStreamer {
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Device loading timeout'));
-      }, 10000);
+      }, 20000);
 
       this.socket.emit('getRouterRtpCapabilities', (routerRtpCapabilities: mediasoupClient.types.RtpCapabilities | null) => {
         clearTimeout(timeout);
@@ -134,7 +134,7 @@ class VirtualDeviceStreamer {
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Transport creation timeout'));
-      }, 15000);
+      }, 30000);
 
       this.socket.emit('createConsumerTransport', rtpCapabilities, async (transportOptions: TransportOptions | null) => {
         clearTimeout(timeout);
@@ -183,7 +183,7 @@ class VirtualDeviceStreamer {
     return new Promise<mediasoupClient.types.Consumer | null>((resolve, reject) => {
       const timeout = setTimeout(() => {
         resolve(null); // Don't reject, just return null if no producer available
-      }, 10000);
+      }, 20000);
 
       this.socket.emit('consume', 
         { kind, rtpCapabilities: this.device.rtpCapabilities }, 

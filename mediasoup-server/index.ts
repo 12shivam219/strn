@@ -172,11 +172,35 @@ io.on('connection', (socket) => {
         callback({ error: 'Not in a room. Please join a room first.' });
         return;
       }
+
+      // Get TURN credentials
+      const credentials = currentTurnCredentials || await getTurnCredentials();
+
       const transport = await router.createWebRtcTransport({
         listenIps: [{ ip: '0.0.0.0', announcedIp: null }],
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
+        // Use TURN servers if configured
+        iceServers: TURN_CONFIG.azure.enabled
+          ? [
+              {
+                urls: TURN_CONFIG.azure.servers,
+                username: credentials.username,
+                credential: credentials.password
+              }
+            ]
+          : TURN_CONFIG.custom.enabled
+          ? [
+              {
+                urls: TURN_CONFIG.custom.servers,
+                username: credentials.username,
+                credential: credentials.password
+              }
+            ]
+          : [],
+        // Use free STUN servers as fallback
+        iceTransportPolicy: TURN_CONFIG.azure.enabled || TURN_CONFIG.custom.enabled ? 'relay' : 'all'
       });
       const transports = await getPeerArray(socket.id, 'transports');
       transports.push(transport.id);
@@ -399,15 +423,27 @@ async function startServer() {
 
 startServer();
 
-// TURN/STUN and Simulcast/SVC config
-const turnCredentials = {
-  username: process.env.TURN_USERNAME || 'user',
-  password: process.env.TURN_PASSWORD || 'pass',
-  urls: process.env.TURN_URLS?.split(',') || [
-    'turn:turn.example.com:3478?transport=udp',
-    'turn:turn.example.com:3478?transport=tcp'
-  ]
-};
+import { TURN_CONFIG, getTurnCredentials } from './turn-config';
+
+// Initialize TURN/STUN configuration
+let currentTurnCredentials: { username: string; password: string; ttl: number } | null = null;
+
+// Function to refresh TURN credentials periodically
+async function refreshTurnCredentials() {
+  try {
+    currentTurnCredentials = await getTurnCredentials();
+    console.log('TURN credentials refreshed');
+    // Schedule next refresh before credentials expire
+    setTimeout(refreshTurnCredentials, (currentTurnCredentials?.ttl || 86400) * 1000);
+  } catch (error) {
+    console.error('Failed to refresh TURN credentials:', error);
+    // Retry in 5 minutes
+    setTimeout(refreshTurnCredentials, 5 * 60 * 1000);
+  }
+}
+
+// Start credential refresh
+refreshTurnCredentials();
 
 // Simulcast/SVC settings
 const simulcastSettings = {

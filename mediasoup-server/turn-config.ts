@@ -7,12 +7,16 @@ export const TURN_CONFIG = {
     accountKey: process.env.AZURE_MEDIA_ACCOUNT_KEY,
     location: process.env.AZURE_MEDIA_ACCOUNT_LOCATION,
     region: process.env.AZURE_MEDIA_ACCOUNT_REGION,
-    endpoint: process.env.AZURE_MEDIA_ACCOUNT_ENDPOINT
+    endpoint: process.env.AZURE_MEDIA_ACCOUNT_ENDPOINT,
+    servers: [
+      'turn:turn.bistri.com:80',
+      'turn:turn.bistri.com:443'
+    ]
   },
 
   // Free TURN/STUN servers (for development/testing)
   free: {
-    enabled: process.env.USE_FREE_TURN === 'true',
+    enabled: true,  // Default to true for free servers
     servers: [
       'stun:stun.l.google.com:19302',
       'stun:stun1.l.google.com:19302',
@@ -34,6 +38,11 @@ export const TURN_CONFIG = {
     ttl: parseInt(process.env.TURN_TTL || '86400')
   }
 };
+
+// Default to free TURN/STUN servers if no other configuration is enabled
+if (!TURN_CONFIG.azure.enabled && !TURN_CONFIG.custom.enabled) {
+  TURN_CONFIG.free.enabled = true;
+}
 
 // Helper function to get TURN credentials
 export async function getTurnCredentials(): Promise<{ username: string; password: string; ttl: number }> {

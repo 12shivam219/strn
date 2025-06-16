@@ -46,6 +46,8 @@ services:
         value: "2125b6c327c6084c7edf80a358ffdb1a"
       - key: ALLOWED_ORIGINS
         value: "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io,https://strn-rbdx.onrender.com"
+      - key: SESSION_COOKIE_DOMAIN
+        value: ".centralindia.azurecontainerapps.io"
       - key: PORT
         value: "3000"
     ports:
