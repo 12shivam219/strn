@@ -33,7 +33,7 @@ app.use(express.json());
 
 // Prometheus metrics
 const collectDefaultMetrics = client.collectDefaultMetrics;
-collectDefaultMetrics();
+collectDefaultMetrics({ eventLoopLagMonitor: false });
 const requestCounter = new client.Counter({
   name: 'http_requests_total',
   help: 'Total number of HTTP requests',

@@ -4,7 +4,7 @@
   "description": "Cross-platform Electron + React client for streaming",
   "main": "dist/electron/main.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "npx vite",
     "build": "vite build && tsc -p tsconfig.electron.json",
     "electron": "electron .",
     "start": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
