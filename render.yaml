@@ -2,32 +2,75 @@ services:
   - type: web
     name: nginx-gateway
     env: docker
-    plan: free
+    plan: pro
     dockerfilePath: ./nginx-gateway/Dockerfile
     buildCommand: ""
     startCommand: ""
-    envVars: []
-    
+    envVars:
+      - key: AUTH_SERVER_URL
+        value: "https://auth-streaming-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io"
+      - key: MEDIA_SERVER_URL
+        value: "https://mediasoup-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io"
+      - key: CLIENT_URL
+        value: "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io"
+
   - type: web
     name: client
     env: docker
-    plan: free
+    plan: pro
     dockerfilePath: ./client/Dockerfile
-    buildCommand: ""
-    startCommand: ""
-    envVars: []
-    
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: REACT_APP_AUTH_SERVER_URL
+        value: "https://auth-streaming-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io"
+      - key: REACT_APP_MEDIA_SERVER_URL
+        value: "https://mediasoup-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io"
+      - key: REACT_APP_NGINX_URL
+        value: "https://strn-rbdx.onrender.com"
+    ports:
+      - port: 5173
+        onOpen: "external"
+
   - type: web
     name: auth-streaming-server
     env: docker
-    plan: free
+    plan: pro
     dockerfilePath: ./auth-streaming-server/Dockerfile
-    buildCommand: ""
-    startCommand: ""
-    envVars: []
-    
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: MEDIA_SERVER_URL
+        value: "https://mediasoup-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io"
+      - key: SESSION_SECRET
+        value: "2125b6c327c6084c7edf80a358ffdb1a"
+      - key: ALLOWED_ORIGINS
+        value: "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io,https://strn-rbdx.onrender.com"
+      - key: PORT
+        value: "3000"
+    ports:
+      - port: 3000
+        onOpen: "external"
+
   - type: web
     name: mediasoup-server
+    env: docker
+    plan: pro
+    dockerfilePath: ./mediasoup-server/Dockerfile
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: "3001"
+      - key: MAX_INCOMING_BITRATE
+        value: "10000000"
+      - key: MAX_OUTGOING_BITRATE
+        value: "10000000"
+      - key: ALLOWED_ORIGINS
+        value: "https://auth-streaming-server.yourdomain.com"
+    ports:
+      - port: 3001
+        onOpen: "external"
     env: docker
     plan: free
     dockerfilePath: ./mediasoup-server/Dockerfile
