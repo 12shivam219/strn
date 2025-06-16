@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import * as mediasoupClient from "mediasoup-client";
 import { io } from "socket.io-client";
 
-const SIGNALING_URL = "https://strn-rbdx.onrender.com/"; // NGINX gateway domain
+const SIGNALING_URL = "https://auth-streaming-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io"; // Direct auth-streaming-server URL
 const MAX_RETRIES = 10;
 const RETRY_DELAY = 1000; // ms
 
