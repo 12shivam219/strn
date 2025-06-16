@@ -1,5 +1,5 @@
 # Dockerfile for auth-streaming-server
-FROM node:18-alpine
+FROM node:18-alpine AS builder
 WORKDIR /app
 
 # Install dependencies
@@ -20,9 +20,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --production
 
-# Copy built files from build stage
-COPY --from=0 /app/dist ./dist
-COPY --from=0 /app/node_modules ./node_modules
+# Copy built files from builder stage
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
 
 # Set environment variables
 ENV NODE_ENV=production
