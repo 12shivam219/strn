@@ -18,12 +18,44 @@ declare module 'express-session' {
 
 const app = express();
 const server = http.createServer(app);
-const io = new SocketIOServer(server, { cors: { origin: '*' } });
+
+// Configure Socket.IO with proper WebSocket settings
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  maxHttpBufferSize: 1e8,
+  allowEIO3: true
+});
+
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
-app.use(cors());
-app.use(bodyParser.json());
-app.use(session({ secret: 'secret123', resave: false, saveUninitialized: true }));
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
+
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'secret123',
+  resave: false,
+  saveUninitialized: true,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
 
 const users: Record<string, { username: string, password: string, streamId: string }> = {};
 const streamAccess: Record<string, { password?: string, owner: string }> = {};
