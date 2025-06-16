@@ -7,29 +7,44 @@ import client from 'prom-client';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import pino from 'pino';
+
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const app = express();
 const server = http.createServer(app);
-const CLIENT_ORIGIN = "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io";
+
+// Get origins from environment variables
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',') || [
+  "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io",
+  "https://strn-rbdx.onrender.com"
+];
+
 const io = new Server(server, {
   cors: {
-    origin: [
-      "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io",
-      "https://strn-rbdx.onrender.com"
-    ],
-    methods: ["GET", "POST"],
-    credentials: true
-  }
+    origin: ALLOWED_ORIGINS,
+    methods: ['GET', 'POST'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    maxHttpBufferSize: 1e8
+  },
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  allowEIO3: true,
+  cookie: false
 });
 
 app.use(cors({
-  origin: [
-    "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io",
-    "https://strn-rbdx.onrender.com"
-  ],
-  credentials: true
+  origin: ALLOWED_ORIGINS,
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  maxAge: 86400
 }));
-app.use(express.json());
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Prometheus metrics
 const collectDefaultMetrics = client.collectDefaultMetrics;
@@ -39,8 +54,17 @@ const requestCounter = new client.Counter({
   help: 'Total number of HTTP requests',
 });
 
-const mediasoupWorkers: any[] = [];
-let router: any;
+// MediaSoup settings
+const mediasoupSettings = {
+  numWorkers: process.env.MEDIASOUP_WORKERS || 2,
+  maxBitrate: process.env.MEDIASOUP_MAX_BITRATE || 10000000,
+  initialBitrate: process.env.MEDIASOUP_INITIAL_BITRATE || 1000000,
+  minBitrate: process.env.MEDIASOUP_MIN_BITRATE || 100000
+};
+
+// Workers pool
+const mediasoupWorkers: mediasoup.Worker[] = [];
+let router: mediasoup.Router | null = null;
 
 // --- REMOVE REDIS ---
 // In-memory room and peer state
@@ -83,7 +107,7 @@ async function createWorker() {
   });
 
   worker.on('died', () => {
-    console.error('Mediasoup worker died. Exiting...');
+    logger.error('Mediasoup worker died. Exiting...');
     process.exit(1);
   });
 
@@ -123,7 +147,7 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  logger.info('Client connected:', socket.id);
 
   // Expect client to join a room
   socket.on('joinRoom', async ({ roomId }, callback) => {
@@ -144,7 +168,7 @@ io.on('connection', (socket) => {
     try {
       const roomId = await getPeerData(socket.id, 'roomId');
       if (!roomId) {
-        console.error(`Socket ${socket.id} tried to create transport without joining a room.`);
+        logger.error(`Socket ${socket.id} tried to create transport without joining a room.`);
         callback({ error: 'Not in a room. Please join a room first.' });
         return;
       }
@@ -167,7 +191,7 @@ io.on('connection', (socket) => {
         dtlsParameters: transport.dtlsParameters,
       });
     } catch (error) {
-      console.error('Error in createProducerTransport:', error);
+      logger.error('Error in createProducerTransport:', error);
       callback({ error: (error as Error).message });
     }
   });
@@ -364,20 +388,36 @@ async function startServer() {
   try {
     await createRouter();
     server.listen(PORT, () => {
-      console.log(`✅ Mediasoup server running on http://localhost:${PORT}`);
-      console.log('Waiting for WebSocket connections...');
+      logger.info(`Mediasoup server running on http://localhost:${PORT}`);
+      logger.info('Waiting for WebSocket connections...');
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server:', error);
     process.exit(1);
   }
 }
 
 startServer();
 
-// TURN/STUN and Simulcast/SVC config (to be used in router.createWebRtcTransport and router.createRouter)
-// Example TURN config:
-// listenIps: [{ ip: '0.0.0.0', announcedIp: null }]
+// TURN/STUN and Simulcast/SVC config
+const turnCredentials = {
+  username: process.env.TURN_USERNAME || 'user',
+  password: process.env.TURN_PASSWORD || 'pass',
+  urls: process.env.TURN_URLS?.split(',') || [
+    'turn:turn.example.com:3478?transport=udp',
+    'turn:turn.example.com:3478?transport=tcp'
+  ]
+};
+
+// Simulcast/SVC settings
+const simulcastSettings = {
+  encodings: [
+    { rid: 'r0', maxBitrate: 100000 },
+    { rid: 'r1', maxBitrate: 300000 },
+    { rid: 'r2', maxBitrate: 900000 }
+  ],
+  scalabilityMode: 'L1T3'
+};
 
 // Simple file logger
 function logToFile(msg: string) {
