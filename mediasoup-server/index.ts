@@ -13,14 +13,20 @@ const server = http.createServer(app);
 const CLIENT_ORIGIN = "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io";
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_ORIGIN,
+    origin: [
+      "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io",
+      "https://strn-rbdx.onrender.com"
+    ],
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
 app.use(cors({
-  origin: CLIENT_ORIGIN,
+  origin: [
+    "https://client.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io",
+    "https://strn-rbdx.onrender.com"
+  ],
   credentials: true
 }));
 app.use(express.json());
