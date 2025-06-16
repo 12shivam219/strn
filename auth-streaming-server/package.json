@@ -29,5 +29,8 @@
     "@types/socket.io": "^4.17.17",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
