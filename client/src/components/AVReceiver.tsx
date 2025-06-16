@@ -5,6 +5,18 @@ import { io } from "socket.io-client";
 const SIGNALING_URL = import.meta.env.VITE_SIGNALING_URL || "https://auth-streaming-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io"; // Direct auth-streaming-server URL
 const MAX_RETRIES = 10;
 const RETRY_DELAY = 1000; // ms
+const SOCKET_CONFIG = {
+  transports: ['websocket'],
+  timeout: 30000,
+  reconnection: true,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  randomizationFactor: 0.5,
+  query: {
+    transport: 'websocket'
+  }
+} as const;
 
 let retryTimeout: NodeJS.Timeout | null = null;
 
@@ -26,7 +38,7 @@ export default function AVReceiver({
       try {
         setStatus("Connecting to server...");
         const device = new mediasoupClient.Device();
-        const socket = io(SIGNALING_URL, { query: { token } });
+        const socket = io(SIGNALING_URL, { ...SOCKET_CONFIG, query: { token } });
         socketRef.current = socket;
 
         // Debug event listeners

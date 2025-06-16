@@ -6,11 +6,20 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: true
+    host: true,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    }
   },
   resolve: {
     alias: {
       '@': '/src'
     }
+  },
+  define: {
+    'process.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL || 'https://auth-streaming-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io/api'),
+    'process.env.VITE_SIGNALING_URL': JSON.stringify(process.env.VITE_SIGNALING_URL || 'https://auth-streaming-server.victoriouswater-bf2045fa.centralindia.azurecontainerapps.io')
   }
 });
